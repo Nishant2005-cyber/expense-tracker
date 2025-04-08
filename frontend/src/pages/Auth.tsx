@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import {
   Box,
   Paper,
@@ -12,12 +12,26 @@ import {
   IconButton,
   useTheme,
   styled,
+  Alert,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
 } from '@mui/material';
 import {
   Google as GoogleIcon,
   Facebook as FacebookIcon,
   GitHub as GitHubIcon,
 } from '@mui/icons-material';
+import {
+  login,
+  signup,
+  loginWithGoogle,
+  loginWithFacebook,
+  loginWithGithub,
+  forgotPassword,
+  isAuthenticated,
+} from '../services/auth';
 
 interface AuthFormData {
   name?: string;
@@ -85,11 +99,24 @@ const Auth: React.FC = () => {
     email: '',
     password: '',
   });
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
+  const [showForgotPassword, setShowForgotPassword] = useState(false);
+  const [resetEmail, setResetEmail] = useState('');
+  const [resetSuccess, setResetSuccess] = useState(false);
   const theme = useTheme();
   const navigate = useNavigate();
+  const location = useLocation();
+
+  useEffect(() => {
+    if (isAuthenticated()) {
+      navigate('/dashboard');
+    }
+  }, [navigate]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setError(null);
     const { name, value } = e.target;
     setFormData((prev) => ({
       ...prev,
@@ -97,11 +124,64 @@ const Auth: React.FC = () => {
     }));
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    // TODO: Implement authentication logic
-    console.log('Form submitted:', formData);
-    navigate('/dashboard');
+    setError(null);
+    setLoading(true);
+
+    try {
+      if (isLogin) {
+        await login(formData.email, formData.password);
+      } else {
+        if (formData.password !== formData.confirmPassword) {
+          throw new Error('Passwords do not match');
+        }
+        if (!formData.name) {
+          throw new Error('Name is required');
+        }
+        await signup(formData.name, formData.email, formData.password);
+      }
+
+      if (rememberMe) {
+        localStorage.setItem('rememberMe', 'true');
+      }
+
+      navigate('/dashboard');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'An error occurred');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleForgotPassword = async () => {
+    try {
+      setLoading(true);
+      await forgotPassword(resetEmail);
+      setResetSuccess(true);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to send reset email');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSocialLogin = async (provider: 'google' | 'facebook' | 'github') => {
+    try {
+      switch (provider) {
+        case 'google':
+          await loginWithGoogle();
+          break;
+        case 'facebook':
+          await loginWithFacebook();
+          break;
+        case 'github':
+          await loginWithGithub();
+          break;
+      }
+    } catch (err) {
+      setError(`Failed to login with ${provider}`);
+    }
   };
 
   return (
@@ -111,7 +191,7 @@ const Auth: React.FC = () => {
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
-      }}>
+    }}>
       <Box
         sx={{
           minHeight: '100vh',
@@ -148,6 +228,11 @@ const Auth: React.FC = () => {
 
           <form onSubmit={handleSubmit}>
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+              {error && (
+                <Alert severity="error" sx={{ mb: 2 }}>
+                  {error}
+                </Alert>
+              )}
               {!isLogin && (
                 <StyledTextField
                   fullWidth
@@ -207,6 +292,7 @@ const Auth: React.FC = () => {
                   />
                   <Button
                     variant="text"
+                    onClick={() => setShowForgotPassword(true)}
                     sx={{ color: theme.palette.accent.main, textTransform: 'none' }}
                   >
                     Forgot Password?
@@ -217,8 +303,9 @@ const Auth: React.FC = () => {
                 fullWidth
                 type="submit"
                 size="large"
+                disabled={loading}
               >
-                {isLogin ? 'Log In' : 'Sign Up'}
+                {loading ? 'Please wait...' : (isLogin ? 'Log In' : 'Sign Up')}
               </StyledButton>
               <Typography
                 variant="body2"
@@ -238,13 +325,13 @@ const Auth: React.FC = () => {
                   Or continue with
                 </Typography>
                 <Box sx={{ display: 'flex', gap: 2, justifyContent: 'center' }}>
-                  <SocialButton>
+                  <SocialButton onClick={() => handleSocialLogin('google')}>
                     <GoogleIcon />
                   </SocialButton>
-                  <SocialButton>
+                  <SocialButton onClick={() => handleSocialLogin('facebook')}>
                     <FacebookIcon />
                   </SocialButton>
-                  <SocialButton>
+                  <SocialButton onClick={() => handleSocialLogin('github')}>
                     <GitHubIcon />
                   </SocialButton>
                 </Box>
@@ -253,6 +340,46 @@ const Auth: React.FC = () => {
           </form>
         </StyledPaper>
       </Box>
+
+      {/* Forgot Password Dialog */}
+      <Dialog open={showForgotPassword} onClose={() => setShowForgotPassword(false)}>
+        <DialogTitle>Reset Password</DialogTitle>
+        <DialogContent>
+          {resetSuccess ? (
+            <Alert severity="success" sx={{ mt: 2 }}>
+              Password reset instructions have been sent to your email.
+            </Alert>
+          ) : (
+            <>
+              <Typography variant="body2" sx={{ mb: 2, mt: 1 }}>
+                Enter your email address and we'll send you instructions to reset your password.
+              </Typography>
+              <TextField
+                fullWidth
+                label="Email"
+                type="email"
+                value={resetEmail}
+                onChange={(e) => setResetEmail(e.target.value)}
+                required
+              />
+            </>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setShowForgotPassword(false)}>
+            {resetSuccess ? 'Close' : 'Cancel'}
+          </Button>
+          {!resetSuccess && (
+            <Button
+              onClick={handleForgotPassword}
+              disabled={loading || !resetEmail}
+              variant="contained"
+            >
+              {loading ? 'Sending...' : 'Send Reset Link'}
+            </Button>
+          )}
+        </DialogActions>
+      </Dialog>
     </Container>
   );
 };

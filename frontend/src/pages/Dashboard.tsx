@@ -39,6 +39,7 @@ import { styled } from '@mui/material/styles';
 import UpdateTransaction from '../components/UpdateTransaction';
 import AddTransaction from '../components/AddTransaction';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell, BarChart, Bar } from 'recharts';
+import { logout } from '../services/auth';
 
 const drawerWidth = 240;
 
@@ -127,27 +128,33 @@ const Dashboard: React.FC = () => {
   ];
 
   useEffect(() => {
+    const token = localStorage.getItem('token');
+    const user = localStorage.getItem('currentUser');
+    if (!token || !user) {
+      navigate('/auth');
+      return;
+    }
     loadTransactions();
   }, []);
 
-    const loadTransactions = () => {
-      const storedTransactions = localStorage.getItem('transactions');
-      if (storedTransactions) {
-        const parsedTransactions = JSON.parse(storedTransactions);
-        setTransactions(parsedTransactions);
-        
-        const income = parsedTransactions
-          .filter((t: Transaction) => t.type === 'income')
-          .reduce((acc: number, curr: Transaction) => acc + curr.amount, 0);
-        
-        const expense = parsedTransactions
-          .filter((t: Transaction) => t.type === 'expense')
-          .reduce((acc: number, curr: Transaction) => acc + curr.amount, 0);
-        
-        setTotalIncome(income);
-        setTotalExpense(expense);
-      }
-    };
+  const loadTransactions = () => {
+    const storedTransactions = localStorage.getItem('transactions');
+    if (storedTransactions) {
+      const parsedTransactions = JSON.parse(storedTransactions);
+      setTransactions(parsedTransactions);
+      
+      const income = parsedTransactions
+        .filter((t: Transaction) => t.type === 'income')
+        .reduce((acc: number, curr: Transaction) => acc + curr.amount, 0);
+      
+      const expense = parsedTransactions
+        .filter((t: Transaction) => t.type === 'expense')
+        .reduce((acc: number, curr: Transaction) => acc + curr.amount, 0);
+      
+      setTotalIncome(income);
+      setTotalExpense(expense);
+    }
+  };
 
   const handleUpdateClick = (transaction: Transaction) => {
     setSelectedTransaction(transaction);
@@ -319,6 +326,10 @@ const Dashboard: React.FC = () => {
   }, [transactions]);
 
   const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884D8', '#82CA9D'];
+
+  const handleLogout = () => {
+    logout();
+  };
 
   return (
     <Box sx={{ display: 'flex' }}>
