@@ -145,11 +145,15 @@ const AddExpense: React.FC = () => {
     }));
   };
 
-  const handleAddTransaction = async (newTransaction: Transaction) => {
+  const handleAddTransaction = async (newTransaction: Omit<Transaction, 'id'>) => {
     try {
       const storedTransactions = localStorage.getItem('transactions');
       const allTransactions = storedTransactions ? JSON.parse(storedTransactions) : [];
-      const updatedTransactions = [...allTransactions, newTransaction];
+      const transactionWithId = {
+        ...newTransaction,
+        id: crypto.randomUUID()
+      };
+      const updatedTransactions = [...allTransactions, transactionWithId];
       localStorage.setItem('transactions', JSON.stringify(updatedTransactions));
       
       loadTransactions();
