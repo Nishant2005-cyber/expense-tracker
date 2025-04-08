@@ -51,10 +51,30 @@ interface MenuItem {
 interface Transaction {
   id: string;
   type: 'income' | 'expense';
+  category: string;
+  amount: number;
+  description: string;
+  date: string;
+}
+
+interface CategoryBreakdownItem {
+  category: string;
+  amount: number;
+  description: string;
+  date: string;
+}
+
+interface MonthlyTrendItem {
+  month: string;
   amount: number;
   category: string;
-  date: string;
   description: string;
+}
+
+interface ChartDataItem {
+  date: string;
+  income: number;
+  expense: number;
 }
 
 const StyledCard = styled(Card)(({ theme }) => ({
@@ -244,7 +264,7 @@ const Dashboard: React.FC = () => {
   );
 
   // Prepare data for the chart
-  const chartData = React.useMemo(() => {
+  const chartData = React.useMemo<ChartDataItem[]>(() => {
     const last7Days = Array.from({ length: 7 }, (_, i) => {
       const date = new Date();
       date.setDate(date.getDate() - i);
@@ -269,44 +289,33 @@ const Dashboard: React.FC = () => {
   }, [transactions]);
 
   // Calculate category breakdown
-  const categoryBreakdown = React.useMemo(() => {
-    const expenses = transactions.filter(t => t.type === 'expense');
-    const categoryMap = new Map<string, number>();
+  const categoryBreakdown = React.useMemo<CategoryBreakdownItem[]>(() => {
+    const expenses = transactions.filter((t: Transaction) => t.type === 'expense');
+    // Sort expenses by amount in descending order
+    const sortedExpenses = [...expenses].sort((a: Transaction, b: Transaction) => b.amount - a.amount);
     
-    expenses.forEach(expense => {
-      const current = categoryMap.get(expense.category) || 0;
-      categoryMap.set(expense.category, current + expense.amount);
-    });
-
-    return Array.from(categoryMap.entries())
-      .map(([category, amount]) => ({
-        category,
-        amount,
-        percentage: (amount / totalExpense) * 100
-      }))
-      .sort((a, b) => b.amount - a.amount);
-  }, [transactions, totalExpense]);
+    return sortedExpenses.map((expense: Transaction) => ({
+      category: expense.category,
+      amount: expense.amount,
+      description: expense.description,
+      date: expense.date
+    }));
+  }, [transactions]);
 
   // Calculate monthly spending trend
-  const monthlyTrend = React.useMemo(() => {
-    const expenses = transactions.filter(t => t.type === 'expense');
-    const monthlyMap = new Map<string, number>();
+  const monthlyTrend = React.useMemo<MonthlyTrendItem[]>(() => {
+    const expenses = transactions.filter((t: Transaction) => t.type === 'expense');
+    // Sort expenses by date
+    const sortedExpenses = [...expenses].sort((a: Transaction, b: Transaction) => 
+      new Date(a.date).getTime() - new Date(b.date).getTime()
+    );
     
-    expenses.forEach(expense => {
-      const month = new Date(expense.date).toLocaleString('default', { month: 'short' });
-      const current = monthlyMap.get(month) || 0;
-      monthlyMap.set(month, current + expense.amount);
-    });
-
-    return Array.from(monthlyMap.entries())
-      .map(([month, amount]) => ({
-        month,
-        amount
-      }))
-      .sort((a, b) => {
-        const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-        return months.indexOf(a.month) - months.indexOf(b.month);
-      });
+    return sortedExpenses.map((expense: Transaction) => ({
+      month: new Date(expense.date).toLocaleString('default', { month: 'short' }),
+      amount: expense.amount,
+      category: expense.category,
+      description: expense.description
+    }));
   }, [transactions]);
 
   const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884D8', '#82CA9D'];
@@ -484,11 +493,12 @@ const Dashboard: React.FC = () => {
             </Box>
 
             {/* Analysis Section */}
-            <Box sx={{ mt: 3 }}>
-              <Grid container spacing={3}>
+            <Box sx={{ mt: 3, display: 'flex', flexDirection: 'column', gap: 3 }}>
+              {/* Top Row - Category Breakdown and Monthly Trend */}
+              <Box sx={{ display: 'flex', gap: 3, flexWrap: 'wrap' }}>
                 {/* Category Breakdown */}
-                <Grid container spacing={2}>
-                  <StyledCard>
+                <Box sx={{ flex: 1, minWidth: { xs: '100%', md: '45%' } }}>
+                  <StyledCard sx={{ height: '100%' }}>
                     <CardHeader
                       title={
                         <Typography variant="h6" color="light.main">
@@ -502,7 +512,7 @@ const Dashboard: React.FC = () => {
                       }
                     />
                     <Divider sx={{ borderColor: 'rgba(255, 255, 255, 0.1)' }} />
-                    <CardContent>
+                    <CardContent sx={{ height: 'calc(100% - 120px)', overflow: 'auto' }}>
                       <Box sx={{ height: 300 }}>
                         <ResponsiveContainer width="100%" height="100%">
                           <PieChart>
@@ -514,7 +524,7 @@ const Dashboard: React.FC = () => {
                               outerRadius={80}
                               fill="#8884d8"
                               dataKey="amount"
-                              label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                              label={({ category, amount }) => `${category} $${amount.toFixed(2)}`}
                             >
                               {categoryBreakdown.map((entry, index) => (
                                 <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
@@ -526,14 +536,17 @@ const Dashboard: React.FC = () => {
                                 border: '1px solid rgba(255, 255, 255, 0.1)',
                                 color: 'light.main'
                               }}
-                              formatter={(value: number) => [`$${value.toFixed(2)}`, 'Amount']}
+                              formatter={(value: number, name: string, props: any) => [
+                                `$${value.toFixed(2)}`,
+                                `${props.payload.description || props.payload.category}`
+                              ]}
                             />
                           </PieChart>
                         </ResponsiveContainer>
                       </Box>
                       <Box sx={{ mt: 2 }}>
                         {categoryBreakdown.map((item, index) => (
-                          <Box key={item.category} sx={{ mb: 1 }}>
+                          <Box key={`${item.category}-${index}`} sx={{ mb: 1 }}>
                             <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
                               <Typography variant="body2" color="light.main">
                                 {item.category}
@@ -543,13 +556,13 @@ const Dashboard: React.FC = () => {
                                   ${item.amount.toFixed(2)}
                                 </Typography>
                                 <Typography variant="caption" color="gray.main">
-                                  ({item.percentage.toFixed(1)}%)
+                                  {new Date(item.date).toLocaleDateString()}
                                 </Typography>
                               </Box>
                             </Box>
                             <LinearProgress
                               variant="determinate"
-                              value={item.percentage}
+                              value={(item.amount / Math.max(...categoryBreakdown.map(i => i.amount))) * 100}
                               sx={{
                                 height: 8,
                                 borderRadius: 4,
@@ -564,11 +577,11 @@ const Dashboard: React.FC = () => {
                       </Box>
                     </CardContent>
                   </StyledCard>
-                </Grid>
+                </Box>
 
                 {/* Monthly Spending Trend */}
-                <Grid container spacing={2}>
-                  <StyledCard>
+                <Box sx={{ flex: 1, minWidth: { xs: '100%', md: '45%' } }}>
+                  <StyledCard sx={{ height: '100%' }}>
                     <CardHeader
                       title={
                         <Typography variant="h6" color="light.main">
@@ -582,7 +595,7 @@ const Dashboard: React.FC = () => {
                       }
                     />
                     <Divider sx={{ borderColor: 'rgba(255, 255, 255, 0.1)' }} />
-                    <CardContent>
+                    <CardContent sx={{ height: 'calc(100% - 120px)', overflow: 'auto' }}>
                       <Box sx={{ height: 300 }}>
                         <ResponsiveContainer width="100%" height="100%">
                           <BarChart data={monthlyTrend}>
@@ -631,73 +644,90 @@ const Dashboard: React.FC = () => {
                       </Box>
                     </CardContent>
                   </StyledCard>
-                </Grid>
+                </Box>
+              </Box>
 
-                {/* Spending Insights */}
-                <Grid container spacing={2}>
-                  <StyledCard>
-                    <CardHeader
-                      title={
+              {/* Bottom Row - Spending Insights */}
+              <Box>
+                <StyledCard sx={{ height: '100%' }}>
+                  <CardHeader
+                    title={
+                      <Typography variant="h6" color="light.main">
+                        Spending Insights
+                      </Typography>
+                    }
+                    subheader={
+                      <Typography variant="body2" color="gray.main">
+                        Key metrics and recommendations
+                      </Typography>
+                    }
+                  />
+                  <Divider sx={{ borderColor: 'rgba(255, 255, 255, 0.1)' }} />
+                  <CardContent sx={{ height: 'calc(100% - 120px)', overflow: 'auto' }}>
+                    <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2 }}>
+                      <Box sx={{ 
+                        flex: 1, 
+                        minWidth: { xs: '100%', sm: '45%' },
+                        p: 2, 
+                        backgroundColor: 'rgba(255, 255, 255, 0.05)', 
+                        borderRadius: 1 
+                      }}>
+                        <Typography variant="body2" color="gray.main">Savings Rate</Typography>
                         <Typography variant="h6" color="light.main">
-                          Spending Insights
+                          {totalIncome > 0 ? ((totalIncome - totalExpense) / totalIncome * 100).toFixed(1) : 0}%
                         </Typography>
-                      }
-                      subheader={
-                        <Typography variant="body2" color="gray.main">
-                          Key metrics and recommendations
+                        <Typography variant="caption" color="gray.main">
+                          {totalIncome > 0 && ((totalIncome - totalExpense) / totalIncome * 100) < 20 
+                            ? "Consider increasing your savings rate" 
+                            : "Good savings rate"}
                         </Typography>
-                      }
-                    />
-                    <Divider sx={{ borderColor: 'rgba(255, 255, 255, 0.1)' }} />
-                    <CardContent>
-                      <Grid container spacing={3}>
-                        <Grid container spacing={2}>
-                          <Box sx={{ p: 2, backgroundColor: 'rgba(255, 255, 255, 0.05)', borderRadius: 1 }}>
-                            <Typography variant="body2" color="gray.main">Savings Rate</Typography>
-                            <Typography variant="h6" color="light.main">
-                              {totalIncome > 0 ? ((totalIncome - totalExpense) / totalIncome * 100).toFixed(1) : 0}%
-                            </Typography>
-                            <Typography variant="caption" color="gray.main">
-                              {totalIncome > 0 && ((totalIncome - totalExpense) / totalIncome * 100) < 20 
-                                ? "Consider increasing your savings rate" 
-                                : "Good savings rate"}
-                            </Typography>
-                          </Box>
-                        </Grid>
-                        <Grid container spacing={2}>
-                          <Box sx={{ p: 2, backgroundColor: 'rgba(255, 255, 255, 0.05)', borderRadius: 1 }}>
-                            <Typography variant="body2" color="gray.main">Largest Category</Typography>
-                            <Typography variant="h6" color="light.main">
-                              {categoryBreakdown[0]?.category || 'N/A'}
-                            </Typography>
-                            <Typography variant="caption" color="gray.main">
-                              ${categoryBreakdown[0]?.amount.toFixed(2) || 0}
-                            </Typography>
-                          </Box>
-                        </Grid>
-                        <Grid container spacing={2}>
-                          <Box sx={{ p: 2, backgroundColor: 'rgba(255, 255, 255, 0.05)', borderRadius: 1 }}>
-                            <Typography variant="body2" color="gray.main">Expense to Income Ratio</Typography>
-                            <Typography variant="h6" color="light.main">
-                              {totalIncome > 0 ? (totalExpense / totalIncome * 100).toFixed(1) : 0}%
-                            </Typography>
-                            <Typography variant="caption" color="gray.main">
-                              {totalIncome > 0 && (totalExpense / totalIncome) > 0.8 
-                                ? "Consider reducing expenses" 
-                                : "Healthy ratio"}
-                            </Typography>
-                          </Box>
-                        </Grid>
-                      </Grid>
-                    </CardContent>
-                  </StyledCard>
-                </Grid>
-              </Grid>
+                      </Box>
+                      <Box sx={{ 
+                        flex: 1, 
+                        minWidth: { xs: '100%', sm: '45%' },
+                        p: 2, 
+                        backgroundColor: 'rgba(255, 255, 255, 0.05)', 
+                        borderRadius: 1 
+                      }}>
+                        <Typography variant="body2" color="gray.main">Largest Category</Typography>
+                        <Typography variant="h6" color="light.main">
+                          {categoryBreakdown[0]?.category || 'N/A'}
+                        </Typography>
+                        <Typography variant="caption" color="gray.main">
+                          ${categoryBreakdown[0]?.amount.toFixed(2) || 0}
+                        </Typography>
+                      </Box>
+                      <Box sx={{ 
+                        flex: 1, 
+                        minWidth: { xs: '100%', sm: '45%' },
+                        p: 2, 
+                        backgroundColor: 'rgba(255, 255, 255, 0.05)', 
+                        borderRadius: 1 
+                      }}>
+                        <Typography variant="body2" color="gray.main">Expense to Income Ratio</Typography>
+                        <Typography variant="h6" color="light.main">
+                          {totalIncome > 0 ? (totalExpense / totalIncome * 100).toFixed(1) : 0}%
+                        </Typography>
+                        <Typography variant="caption" color="gray.main">
+                          {totalIncome > 0 && (totalExpense / totalIncome) > 0.8 
+                            ? "Consider reducing expenses" 
+                            : "Healthy ratio"}
+                        </Typography>
+                      </Box>
+                    </Box>
+                  </CardContent>
+                </StyledCard>
+              </Box>
             </Box>
           </Box>
 
           {/* Right side - Recent Transactions or Add Transaction Form */}
-          <Box sx={{ width: { xs: '100%', md: '400px' } }}>
+          <Box sx={{ 
+            width: { xs: '100%', md: '400px' },
+            display: 'flex',
+            flexDirection: 'column',
+            height: '100%'
+          }}>
             {showAddTransaction ? (
               <StyledCard>
                 <CardHeader
@@ -721,7 +751,7 @@ const Dashboard: React.FC = () => {
                 </CardContent>
               </StyledCard>
             ) : (
-            <StyledCard>
+            <StyledCard sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
               <CardHeader
                 title={
                   <Typography variant="h6" color="light.main">
@@ -731,7 +761,7 @@ const Dashboard: React.FC = () => {
                 action={
                   <Button
                     startIcon={<AddIcon />}
-                      onClick={() => setShowAddTransaction(true)}
+                    onClick={() => setShowAddTransaction(true)}
                     sx={{ color: theme.palette.light.main }}
                   >
                     Add New
@@ -739,82 +769,122 @@ const Dashboard: React.FC = () => {
                 }
               />
               <Divider sx={{ borderColor: 'rgba(255, 255, 255, 0.1)' }} />
-              <CardContent>
+              <CardContent
+                sx={{
+                  flex: 1,
+                  overflow: 'auto',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 2
+                }}
+              >
                 {transactions.length === 0 ? (
-                  <Typography color="gray.main" textAlign="center" py={4}>
-                    No transactions yet. Click "Add New" to get started.
-                  </Typography>
+                  <Box sx={{ 
+                    flex: 1, 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    justifyContent: 'center' 
+                  }}>
+                    <Typography color="gray.main" textAlign="center">
+                      No transactions yet. Click "Add New" to get started.
+                    </Typography>
+                  </Box>
                 ) : (
-                  transactions.slice(0, 5).map((transaction) => (
-                    <Box
-                      key={transaction.id}
-                      sx={{
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        alignItems: 'center',
-                        mb: 2,
-                        p: 2,
-                        borderRadius: 1,
-                        backgroundColor: 'rgba(255, 255, 255, 0.02)',
-                        '&:hover': {
-                          backgroundColor: 'rgba(255, 255, 255, 0.05)',
-                        },
-                      }}
-                    >
-                      <Box 
-                        sx={{ 
-                          display: 'flex', 
-                          alignItems: 'center', 
-                          gap: 2,
-                          flex: 1,
-                          cursor: 'pointer',
-                        }}
-                        onClick={() => handleUpdateClick(transaction)}
-                      >
-                        <Avatar
+                  <>
+                    <Box sx={{ flex: 1 }}>
+                      {transactions.slice(-6, -1).map((transaction) => (
+                        <Box
+                          key={transaction.id}
                           sx={{
-                            bgcolor: transaction.type === 'income' ? 'success.main' : 'error.main',
-                          }}
-                        >
-                          {transaction.type === 'income' ? <TrendingUp /> : <TrendingDown />}
-                        </Avatar>
-                        <Box>
-                          <Typography variant="subtitle2">{transaction.category}</Typography>
-                          <Typography variant="caption" color="gray.main">
-                            {transaction.description}
-                          </Typography>
-                        </Box>
-                      </Box>
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                        <Box sx={{ textAlign: 'right' }}>
-                          <Typography
-                            variant="subtitle2"
-                            color={transaction.type === 'income' ? 'success.main' : 'error.main'}
-                          >
-                            {transaction.type === 'income' ? '+' : '-'}${transaction.amount.toFixed(2)}
-                          </Typography>
-                          <Typography variant="caption" color="gray.main">
-                            {new Date(transaction.date).toLocaleDateString()}
-                          </Typography>
-                        </Box>
-                        <IconButton
-                          size="small"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleDeleteTransaction(transaction.id);
-                          }}
-                          sx={{ 
-                            color: 'error.main',
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'center',
+                            mb: 2,
+                            p: 2,
+                            borderRadius: 1,
+                            backgroundColor: 'rgba(255, 255, 255, 0.02)',
                             '&:hover': {
-                              backgroundColor: 'rgba(244, 67, 54, 0.1)',
-                            }
+                              backgroundColor: 'rgba(255, 255, 255, 0.05)',
+                            },
                           }}
                         >
-                          <DeleteIcon />
-                        </IconButton>
-                      </Box>
+                          <Box 
+                            sx={{ 
+                              display: 'flex', 
+                              alignItems: 'center', 
+                              gap: 2,
+                              flex: 1,
+                              cursor: 'pointer',
+                            }}
+                            onClick={() => handleUpdateClick(transaction)}
+                          >
+                            <Avatar
+                              sx={{
+                                bgcolor: transaction.type === 'income' ? 'success.main' : 'error.main',
+                              }}
+                            >
+                              {transaction.type === 'income' ? <TrendingUp /> : <TrendingDown />}
+                            </Avatar>
+                            <Box>
+                              <Typography variant="subtitle2">{transaction.category}</Typography>
+                              <Typography variant="caption" color="gray.main">
+                                {transaction.description}
+                              </Typography>
+                            </Box>
+                          </Box>
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                            <Box sx={{ textAlign: 'right' }}>
+                              <Typography
+                                variant="subtitle2"
+                                color={transaction.type === 'income' ? 'success.main' : 'error.main'}
+                              >
+                                {transaction.type === 'income' ? '+' : '-'}${transaction.amount.toFixed(2)}
+                              </Typography>
+                              <Typography variant="caption" color="gray.main">
+                                {new Date(transaction.date).toLocaleDateString()}
+                              </Typography>
+                            </Box>
+                            <IconButton
+                              size="small"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleDeleteTransaction(transaction.id);
+                              }}
+                              sx={{ 
+                                color: 'error.main',
+                                '&:hover': {
+                                  backgroundColor: 'rgba(244, 67, 54, 0.1)',
+                                }
+                              }}
+                            >
+                              <DeleteIcon />
+                            </IconButton>
+                          </Box>
+                        </Box>
+                      ))}
                     </Box>
-                  ))
+                    <Box sx={{ 
+                      display: 'flex', 
+                      justifyContent: 'center', 
+                      mt: 'auto',
+                      pt: 2
+                    }}>
+                      <Button
+                        variant="outlined"
+                        onClick={() => navigate('/add-expense')}
+                        sx={{
+                          color: theme.palette.light.main,
+                          borderColor: theme.palette.light.main,
+                          '&:hover': {
+                            borderColor: theme.palette.light.main,
+                            backgroundColor: 'rgba(255, 255, 255, 0.05)',
+                          },
+                        }}
+                      >
+                        See More Expenses
+                      </Button>
+                    </Box>
+                  </>
                 )}
               </CardContent>
             </StyledCard>

@@ -6,6 +6,7 @@ import { theme } from './theme';
 import Dashboard from './pages/Dashboard';
 import Auth from './pages/Auth';
 import AddExpense from './pages/AddExpense';
+import Report from './pages/Report';
 
 function App() {
   return (
@@ -16,6 +17,7 @@ function App() {
           <Route path="/" element={<Auth />} />
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/add-expense" element={<AddExpense />} />
+          <Route path="/reports" element={<Report />} />
         </Routes>
       </Router>
     </ThemeProvider>
